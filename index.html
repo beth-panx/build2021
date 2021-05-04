@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build2021 Chat</title>
+  <script src="https://unpkg.com/@microsoft/mgt@next.build21/dist/bundle/mgt-loader.js"></script>
+  <style>
+    body, textarea {
+      font-family: 'Segoe UI', 'Segoe UI Web (West European)', 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto,
+        'Helvetica Neue', sans-serif;
+        display: flex;
+        justify-content: center;
+    }
+
+    .main {
+      margin: 5px 15px;
+      width: 800px;
+      padding: 0 10px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .main mgt-login {
+      align-self: flex-end;
+    }
+
+    .main textarea {
+      height: 250px;
+      margin: 20px 0;
+      border: 2px solid #605E5C;
+      padding: 10px;
+    }
+
+    .main textarea:hover {
+      outline: none;
+      border-color: #323130;
+      border-radius: 0;
+    }
+
+    .main textarea:focus {
+      outline: none;
+    }
+
+    .main .cta {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .main button {
+      width: 100px;
+      height: 30px;
+      border: 2px solid #605E5C;
+      background: transparent;
+      color: #605E5C;
+    }
+
+    .main button:hover {
+      outline: none;
+      border-color: #323130;
+      border-radius: 0;
+      color: #323130;
+    }
+
+    .main button:focus {
+      outline: none;
+    }
+
+    .file-list-wrapper {
+      position: relative;
+    }
+
+    .file-list-wrapper #file-list{
+      position: absolute;
+      bottom: 0;
+      left: 100px;
+      display: none;
+      width: 330px;
+      transition: opacity 0.3s linear 0s, right 0s linear 0s;
+    }
+
+    .file-list-wrapper mgt-file {
+      position: absolute;
+      left: 100px;
+      top: 0;
+      width: 400px;
+      margin: -14px 0;
+    }
+
+  </style>
+</head>
+<body>
+  <!-- todo: update scopes -->
+  <mgt-msal2-provider
+  client-id="905a7804-ca54-470c-afe2-ef1e8b716552"
+  scopes="user.read,people.read,user.readbasic.all,contacts.read,presence.read.all,presence.read,user.read.all,group.read.all,files.read,files.read.all,sites.read.all,team.readbasic.all,channel.readbasic.all,ChannelMessage.Send"
+></mgt-msal2-provider>
+
+  <div class="main">
+    <mgt-login></mgt-login>
+    <p>Select a Teams channel to share your message with an attached file.</p>
+
+    <mgt-teams-channel-picker></mgt-teams-channel-picker>
+    <textarea></textarea>
+    <div class="cta">
+      <div class="file-list-wrapper">
+        <button id="file-toggle" onclick="toggleFileList()">Attach file</button>
+        <mgt-file view="twoLines"></mgt-file>
+        <mgt-file-list id="file-list" page-size="6"></mgt-file-list>
+      </div>
+      <button id="send" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+</body>
+<script>
+  const fileList = document.getElementById("file-list");
+  const file = document.querySelector('mgt-file');
+  const picker = document.querySelector('mgt-teams-channel-picker')
+  const textarea = document.querySelector('textarea');
+  const submitButton = document.getElementById("send");
+  let attachmentId;
+  let contentUrl;
+
+  function toggleFileList() {
+    if (fileList.style.display === "none") {
+      fileList.style.display = "block";
+    } else {
+      fileList.style.display = "none";
+    }
+  }
+
+  document.querySelector('mgt-file-list').addEventListener('itemClick', e => {
+    file.fileDetails = e.detail;
+    fileList.style.display = "none";
+
+    const attachmentReg = /\{(.*?)\}/mg;
+    const attachmentMatches = attachmentReg.exec(file.fileDetails.eTag);
+    attachmentId = attachmentMatches[1];
+
+    const webUrlReg = /.+?(?=&action)/mg;
+    const webUrlMatches = webUrlReg.exec(file.fileDetails.webUrl);
+    contentUrl = webUrlMatches[0];
+  });
+
+  async function sendMessage() {
+    const payload = {
+                      "body": {
+                          "contentType": "html",
+                          "content": textarea.value + " <attachment id=" + attachmentId + "></attachment>"
+                      },
+                      "attachments": [
+                          {
+                              "id": attachmentId,
+                              "contentType": "reference",
+                              "contentUrl": contentUrl,
+                              "name": file.fileDetails.name
+                          }
+                      ]
+                  }
+    // reset form
+    file.fileDetails = null;
+    textarea.value = null;
+
+    teamId = picker.selectedItem.team.id;
+    channelId = picker.selectedItem.channel.id;
+
+    if (mgt.Providers.globalProvider.state === mgt.ProviderState.SignedIn) {
+      const client = mgt.Providers.globalProvider.graph.client;
+      await client.api(`/teams/${teamId}/channels/${channelId}/messages`).post(payload);
+    }
+  }
+
+  submitButton.addEventListener('click', () => {
+    submitButton.innerText = "Sending...";
+    submitButton.disabled = true;
+
+    window.setTimeout(() => {
+      submitButton.innerText = "Send";
+      submitButton.disabled = false;
+    }, 2000);
+  }, false);
+</script>
+</html>
